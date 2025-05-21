@@ -8,6 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'dart:io';
+import 'package:flutter/scheduler.dart';
 
 void main() {
   runApp(const YhaCoderLeaderboardApp());
@@ -24,18 +25,32 @@ class YhaCoderLeaderboardApp extends StatelessWidget {
         primaryColor: const Color(0xFFFF6200),
         scaffoldBackgroundColor: const Color(0xFF2B1A0D),
         textTheme: GoogleFonts.orbitronTextTheme(),
-        colorScheme: ColorScheme.dark(
-          primary: const Color(0xFFFF6200),
-          secondary: const Color(0xFFFF8C00),
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFFFF6200),
+          secondary: Color(0xFFFF8C00),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFFF6200),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
         ),
       ),
       darkTheme: ThemeData(
         primaryColor: const Color(0xFFFF6200),
         scaffoldBackgroundColor: const Color(0xFF2B1A0D),
         textTheme: GoogleFonts.orbitronTextTheme(),
-        colorScheme: ColorScheme.dark(
-          primary: const Color(0xFFFF6200),
-          secondary: const Color(0xFFFF8C00),
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFFFF6200),
+          secondary: Color(0xFFFF8C00),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFFF6200),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
         ),
       ),
       themeMode: ThemeMode.system,
@@ -51,7 +66,7 @@ class LeaderboardScreen extends StatefulWidget {
   _LeaderboardScreenState createState() => _LeaderboardScreenState();
 }
 
-class _LeaderboardScreenState extends State<LeaderboardScreen> {
+class _LeaderboardScreenState extends State<LeaderboardScreen> with SingleTickerProviderStateMixin {
   List<dynamic> leaderboardData = [];
   List<dynamic> filteredData = [];
   String sortColumn = 'rank';
@@ -60,12 +75,26 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   String? errorMessage;
   bool isDarkMode = true;
   final TextEditingController _searchController = TextEditingController();
+  late AnimationController _scanlineController;
+  late Animation<double> _scanlineAnimation;
 
   @override
   void initState() {
     super.initState();
     _loadTheme();
     fetchLeaderboard();
+    _scanlineController = AnimationController(
+      duration: const Duration(seconds: 8),
+      vsync: this,
+    )..repeat();
+    _scanlineAnimation = Tween<double>(begin: -1, end: 1).animate(_scanlineController);
+  }
+
+  @override
+  void dispose() {
+    _scanlineController.dispose();
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadTheme() async {
@@ -93,10 +122,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
           'https://script.google.com/macros/s/AKfycbyVAV8QIzzphbtZZGPK7-qfKpwbcEjGcuYwmSSZ6Qydg2slaMAQ6N2lUChYZhL12b6_3Q/exec'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        // Validate and filter valid entries
         final validData = data.where((user) {
           try {
-            // Ensure required fields exist and rank is parseable
             final rank = user['rank']?.toString() ?? '';
             final digits = rank.replaceAll(RegExp(r'[^\d\s]'), '').trim();
             num.tryParse(digits);
@@ -128,15 +155,12 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
       var valueA = a[sortColumn];
       var valueB = b[sortColumn];
       if (sortColumn == 'rank') {
-        // Extract digits from rank, handling emojis and spaces
         try {
-          // Remove all non-digits, trim spaces, and handle Unicode
           final digitsA = valueA.toString().replaceAll(RegExp(r'[^\d\s]'), '').trim();
           final digitsB = valueB.toString().replaceAll(RegExp(r'[^\d\s]'), '').trim();
           valueA = num.tryParse(digitsA) ?? 999999;
           valueB = num.tryParse(digitsB) ?? 999999;
         } catch (e) {
-          // Log error for debugging
           print('Error parsing rank: $valueA vs $valueB, error: $e');
           valueA = 999999;
           valueB = 999999;
@@ -148,9 +172,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         valueA = valueA.toString().toLowerCase();
         valueB = valueB.toString().toLowerCase();
       }
-      return sortAscending
-          ? (valueA.compareTo(valueB))
-          : (valueB.compareTo(valueA));
+      return sortAscending ? valueA.compareTo(valueB) : valueB.compareTo(valueA);
     });
   }
 
@@ -208,221 +230,238 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         ),
       ),
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('YHA Coder Leaderboard'),
-          actions: [
-            IconButton(
-              icon: Icon(isDarkMode ? Icons.wb_sunny : Icons.nightlight_round),
-              onPressed: _toggleTheme,
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: RadialGradient(
+              center: Alignment.center,
+              radius: 1.0,
+              colors: isDarkMode
+                  ? [const Color(0xFF2B1A0D), const Color(0xFF3B261B)]
+                  : [const Color(0xFFF5F5F5), const Color(0xFFE0E0E0)],
             ),
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: fetchLeaderboard,
-            ),
-            IconButton(
-              icon: const Icon(Icons.file_download),
-              onPressed: _exportToCSV,
-            ),
-          ],
-        ),
-        body: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: [
-              TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: 'Search by name...',
-                  prefixIcon: const Icon(Icons.search),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  filled: true,
-                  fillColor: isDarkMode ? Colors.black26 : Colors.white,
-                ),
-                onChanged: _filterData,
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : errorMessage != null
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  errorMessage!,
-                                  style: const TextStyle(color: Colors.red),
-                                  textAlign: TextAlign.center,
-                                ),
-                                const SizedBox(height: 16),
-                                ElevatedButton(
-                                  onPressed: fetchLeaderboard,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: primaryColor,
-                                  ),
-                                  child: const Text('Retry'),
+          ),
+          child: SafeArea(
+            child: Stack(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'YHA Coder Leaderboard',
+                            style: TextStyle(
+                              color: primaryColor,
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              shadows: [
+                                Shadow(
+                                  color: primaryColor.withOpacity(0.7),
+                                  blurRadius: 10,
                                 ),
                               ],
                             ),
-                          )
-                        : filteredData.isEmpty
-                            ? const Center(child: Text('No data available'))
-                            : SingleChildScrollView(
-                                child: DataTable(
-                                  sortColumnIndex: ['rank', 'name', 'points', 'averages', 'achievements'].indexOf(sortColumn),
-                                  sortAscending: sortAscending,
-                                  columns: [
-                                    DataColumn(
-                                      label: const Text('Rank'),
-                                      onSort: (i, ascending) {
-                                        setState(() {
-                                          sortColumn = 'rank';
-                                          sortAscending = ascending;
-                                          _sortData();
-                                        });
-                                      },
+                          ),
+                          Row(
+                            children: [
+                              IconButton(
+                                icon: Icon(
+                                  isDarkMode ? Icons.wb_sunny : Icons.nightlight_round,
+                                  color: Colors.white,
+                                ),
+                                onPressed: _toggleTheme,
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.refresh, color: Colors.white),
+                                onPressed: fetchLeaderboard,
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.file_download, color: Colors.white),
+                                onPressed: _exportToCSV,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: isDarkMode ? Colors.black26 : Colors.white70,
+                          borderRadius: BorderRadius.circular(15),
+                          border: Border.all(color: primaryColor),
+                          boxShadow: [
+                            BoxShadow(
+                              color: primaryColor.withOpacity(0.3),
+                              blurRadius: 10,
+                            ),
+                          ],
+                        ),
+                        child: TextField(
+                          controller: _searchController,
+                          decoration: InputDecoration(
+                            hintText: 'Search by name...',
+                            prefixIcon: Icon(Icons.search, color: primaryColor),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          ),
+                          onChanged: _filterData,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: isDarkMode
+                                ? const Color(0xFF3D2114).withOpacity(0.8)
+                                : Colors.white.withOpacity(0.9),
+                            borderRadius: BorderRadius.circular(15),
+                            border: Border.all(color: primaryColor, width: 2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: primaryColor.withOpacity(0.3),
+                                blurRadius: 25,
+                              ),
+                            ],
+                          ),
+                          child: Stack(
+                            children: [
+                              AnimatedBuilder(
+                                animation: _scanlineAnimation,
+                                builder: (context, child) {
+                                  return Positioned(
+                                    top: 0,
+                                    left: 0,
+                                    right: 0,
+                                    height: 2,
+                                    child: Transform.translate(
+                                      offset: Offset(0, _scanlineAnimation.value * MediaQuery.of(context).size.height / 2),
+                                      child: Container(
+                                        color: primaryColor.withOpacity(0.5),
+                                      ),
                                     ),
-                                    DataColumn(
-                                      label: const Text('Name'),
-                                      onSort: (i, ascending) {
-                                        setState(() {
-                                          sortColumn = 'name';
-                                          sortAscending = ascending;
-                                          _sortData();
-                                        });
-                                      },
-                                    ),
-                                    DataColumn(
-                                      label: const Text('Points'),
-                                      onSort: (i, ascending) {
-                                        setState(() {
-                                          sortColumn = 'points';
-                                          sortAscending = ascending;
-                                          _sortData();
-                                        });
-                                      },
-                                    ),
-                                    DataColumn(
-                                      label: const Text('Averages'),
-                                      onSort: (i, ascending) {
-                                        setState(() {
-                                          sortColumn = 'averages';
-                                          sortAscending = ascending;
-                                          _sortData();
-                                        });
-                                      },
-                                    ),
-                                    DataColumn(
-                                      label: const Text('Achievements'),
-                                      onSort: (i, ascending) {
-                                        setState(() {
-                                          sortColumn = 'achievements';
-                                          sortAscending = ascending;
-                                          _sortData();
-                                        });
-                                      },
-                                    ),
-                                  ],
-                                  rows: filteredData.asMap().entries.map((entry) {
-                                    final index = entry.key;
-                                    final user = entry.value;
-                                    final maxPoints = filteredData
-                                        .map((u) => num.tryParse(u['points'].toString()) ?? 0)
-                                        .reduce((a, b) => a > b ? a : b);
-                                    final pointsPercentage = (num.tryParse(user['points'].toString()) ?? 0) / maxPoints * 100;
-                                    return DataRow(
-                                      cells: [
-                                        DataCell(
-                                          Container(
-                                            width: 40,
-                                            height: 40,
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              gradient: LinearGradient(
-                                                colors: [Colors.orange, primaryColor],
-                                              ),
-                                              boxShadow: [
-                                                BoxShadow(
-                                                  color: primaryColor.withOpacity(0.5),
-                                                  blurRadius: 10,
-                                                ),
-                                              ],
-                                            ),
-                                            child: Center(
-                                              child: Text(
-                                                user['rank'],
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        DataCell(
-                                          GestureDetector(
-                                            onTap: () => _showUserProfileDialog(context, user),
-                                            child: Text(
-                                              user['name'],
-                                              style: TextStyle(
-                                                color: secondaryColor,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Row(
+                                  );
+                                },
+                              ),
+                              isLoading
+                                  ? const Center(child: CircularProgressIndicator())
+                                  : errorMessage != null
+                                      ? Center(
+                                          child: Column(
                                             mainAxisAlignment: MainAxisAlignment.center,
                                             children: [
                                               Text(
-                                                user['points'].toString(),
-                                                style: TextStyle(
-                                                  color: goldColor,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
+                                                errorMessage!,
+                                                style: const TextStyle(color: Colors.red),
+                                                textAlign: TextAlign.center,
                                               ),
-                                              const SizedBox(width: 8),
-                                              SizedBox(
-                                                width: 100,
-                                                child: LinearProgressIndicator(
-                                                  value: pointsPercentage / 100,
-                                                  backgroundColor: Colors.black26,
-                                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                                    primaryColor,
-                                                  ),
-                                                ),
+                                              const SizedBox(height: 16),
+                                              ElevatedButton(
+                                                onPressed: fetchLeaderboard,
+                                                child: const Text('Retry'),
                                               ),
                                             ],
                                           ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            '${user['averages']}%',
-                                            style: const TextStyle(
-                                              color: Color(0xFFFFAB40),
-                                              fontWeight: FontWeight.bold,
+                                        )
+                                      : filteredData.isEmpty
+                                          ? const Center(child: Text('No data available'))
+                                          : ListView.builder(
+                                              padding: const EdgeInsets.all(8),
+                                              itemCount: filteredData.length,
+                                              itemBuilder: (context, index) {
+                                                final user = filteredData[index];
+                                                final maxPoints = filteredData
+                                                    .map((u) => num.tryParse(u['points'].toString()) ?? 0)
+                                                    .reduce((a, b) => a > b ? a : b);
+                                                final pointsPercentage =
+                                                    (num.tryParse(user['points'].toString()) ?? 0) / maxPoints * 100;
+                                                return AnimatedContainer(
+                                                  duration: const Duration(milliseconds: 500),
+                                                  curve: Curves.easeInOut,
+                                                  transform: Matrix4.identity()
+                                                    ..translate(0.0, index * 20.0)
+                                                    ..scale(isLoading ? 0.0 : 1.0),
+                                                  child: GestureDetector(
+                                                    onTap: () => _showUserProfileDialog(context, user),
+                                                    child: Card(
+                                                      color: isDarkMode
+                                                          ? Colors.white.withOpacity(0.05)
+                                                          : Colors.black.withOpacity(0.05),
+                                                      shape: RoundedRectangleBorder(
+                                                        borderRadius: BorderRadius.circular(8),
+                                                        side: BorderSide(color: primaryColor.withOpacity(0.2)),
+                                                      ),
+                                                      elevation: 0,
+                                                      child: Padding(
+                                                        padding: const EdgeInsets.all(12.0),
+                                                        child: Column(
+                                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                                          children: [
+                                                            Row(
+                                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                              children: [
+                                                                _RankBadge(
+                                                                  rank: user['rank'],
+                                                                  primaryColor: primaryColor,
+                                                                ),
+                                                                Text(
+                                                                  user['name'],
+                                                                  style: TextStyle(
+                                                                    color: secondaryColor,
+                                                                    fontWeight: FontWeight.w600,
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                            const SizedBox(height: 8),
+                                                            Row(
+                                                              children: [
+                                                                Text(
+                                                                  'Points: ${user['points']}',
+                                                                  style: TextStyle(color: goldColor),
+                                                                ),
+                                                                const SizedBox(width: 8),
+                                                                Expanded(
+                                                                  child: LinearProgressIndicator(
+                                                                    value: pointsPercentage / 100,
+                                                                    backgroundColor: Colors.black26,
+                                                                    valueColor:
+                                                                        AlwaysStoppedAnimation<Color>(primaryColor),
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                            const SizedBox(height: 4),
+                                                            Text(
+                                                              'Averages: ${user['averages']}%',
+                                                              style: const TextStyle(color: Color(0xFFFFAB40)),
+                                                            ),
+                                                            const SizedBox(height: 4),
+                                                            Text(
+                                                              'Achievements: ${user['achievements'] ?? 'None'}',
+                                                              style: const TextStyle(
+                                                                color: Color(0xFFFFAB40),
+                                                                fontStyle: FontStyle.italic,
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                );
+                                              },
                                             ),
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            user['achievements'] ?? 'None',
-                                            style: const TextStyle(
-                                              color: Color(0xFFFFAB40),
-                                              fontStyle: FontStyle.italic,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    );
-                                  }).toList(),
-                                ),
-                              ),
-              ),
-            ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -433,6 +472,71 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     showDialog(
       context: context,
       builder: (context) => UserProfileDialog(user: user),
+    );
+  }
+}
+
+class _RankBadge extends StatefulWidget {
+  final String rank;
+  final Color primaryColor;
+
+  const _RankBadge({required this.rank, required this.primaryColor});
+
+  @override
+  _RankBadgeState createState() => _RankBadgeState();
+}
+
+class _RankBadgeState extends State<_RankBadge> with SingleTickerProviderStateMixin {
+  late AnimationController _glowController;
+  late Animation<double> _glowAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _glowController = AnimationController(
+      duration: const Duration(seconds: 1),
+      vsync: this,
+    )..repeat(reverse: true);
+    _glowAnimation = Tween<double>(begin: 5, end: 15).animate(_glowController);
+  }
+
+  @override
+  void dispose() {
+    _glowController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _glowAnimation,
+      builder: (context, child) {
+        return Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              colors: [Colors.orange, widget.primaryColor],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: widget.primaryColor.withOpacity(0.5),
+                blurRadius: _glowAnimation.value,
+              ),
+            ],
+          ),
+          child: Center(
+            child: Text(
+              widget.rank,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -455,194 +559,242 @@ class _UserProfileDialogState extends State<UserProfileDialog> {
     final secondaryColor = const Color(0xFFFF8C00);
     final goldColor = const Color(0xFFFFD700);
     final history = widget.user['pointsHistory'] ?? [];
-    final maxPoints = 810; // From JSON data
+    final maxPoints = 810;
 
-    return AlertDialog(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      title: Text(
-        "${widget.user['name']}'s Profile",
-        style: TextStyle(color: primaryColor),
-      ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.9),
+        decoration: BoxDecoration(
+          color: const Color(0xFF2B1A0D).withOpacity(0.9),
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: primaryColor, width: 2),
+          boxShadow: [
+            BoxShadow(
+              color: primaryColor.withOpacity(0.3),
+              blurRadius: 25,
+            ),
+          ],
+        ),
+        child: Stack(
           children: [
-            Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(colors: [Colors.orange, primaryColor]),
-                boxShadow: [
-                  BoxShadow(
-                    color: primaryColor.withOpacity(0.5),
-                    blurRadius: 10,
-                  ),
-                ],
-              ),
-              child: Center(
-                child: Text(
-                  widget.user['rank'],
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
+            Positioned.fill(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(15),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [primaryColor.withOpacity(0.2), Colors.transparent],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              widget.user['name'],
-              style: TextStyle(color: secondaryColor, fontSize: 20),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Icon(FontAwesomeIcons.star, size: 16, color: Colors.white),
-                        const SizedBox(width: 4),
                         Text(
-                          'Points: ${widget.user['points']}',
-                          style: TextStyle(color: goldColor),
+                          "${widget.user['name']}'s Profile",
+                          style: TextStyle(
+                            color: primaryColor,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(colors: [Colors.orange, primaryColor]),
+                        boxShadow: [
+                          BoxShadow(
+                            color: primaryColor.withOpacity(0.5),
+                            blurRadius: 10,
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: Text(
+                          widget.user['rank'],
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      widget.user['name'],
+                      style: TextStyle(color: secondaryColor, fontSize: 20),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(FontAwesomeIcons.star, size: 16, color: Colors.white),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Points: ${widget.user['points']}',
+                                  style: TextStyle(color: goldColor),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                const Icon(FontAwesomeIcons.percentage, size: 16, color: Colors.white),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Averages: ${widget.user['averages']}%',
+                                  style: const TextStyle(color: Color(0xFFFFAB40)),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(FontAwesomeIcons.trophy, size: 16, color: Colors.white),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Achievements:',
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              widget.user['achievements'] ?? 'None',
+                              style: const TextStyle(color: Color(0xFFFFAB40)),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Progress',
+                      style: TextStyle(color: primaryColor, fontSize: 18),
+                    ),
+                    LinearProgressIndicator(
+                      value: (num.tryParse(widget.user['points'].toString()) ?? 0) / maxPoints,
+                      backgroundColor: Colors.black26,
+                      valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+                      minHeight: 25,
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          chartView == 'daily' ? 'Daily Points Change' : 'Weekly Points Total',
+                          style: TextStyle(color: primaryColor),
+                        ),
+                        Row(
+                          children: [
+                            ElevatedButton(
+                              onPressed: () => setState(() => chartView = 'daily'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: chartView == 'daily' ? primaryColor : Colors.grey,
+                              ),
+                              child: const Text('Daily'),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: () => setState(() => chartView = 'weekly'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: chartView == 'weekly' ? primaryColor : Colors.grey,
+                              ),
+                              child: const Text('Weekly'),
+                            ),
+                          ],
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Icon(FontAwesomeIcons.percentage, size: 16, color: Colors.white),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Averages: ${widget.user['averages']}%',
-                          style: const TextStyle(color: Color(0xFFFFAB40)),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(FontAwesomeIcons.trophy, size: 16, color: Colors.white),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Achievements:',
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      widget.user['achievements'] ?? 'None',
-                      style: const TextStyle(color: Color(0xFFFFAB40)),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Progress',
-              style: TextStyle(color: primaryColor, fontSize: 18),
-            ),
-            LinearProgressIndicator(
-              value: (num.tryParse(widget.user['points'].toString()) ?? 0) / maxPoints,
-              backgroundColor: Colors.black26,
-              valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
-              minHeight: 25,
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  chartView == 'daily' ? 'Daily Points Change' : 'Weekly Points Total',
-                  style: TextStyle(color: primaryColor),
-                ),
-                Row(
-                  children: [
-                    ElevatedButton(
-                      onPressed: () => setState(() => chartView = 'daily'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: chartView == 'daily' ? primaryColor : Colors.grey,
+                    Container(
+                      height: 300,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        color: Colors.black.withOpacity(0.2),
                       ),
-                      child: const Text('Daily'),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: () => setState(() => chartView = 'weekly'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: chartView == 'weekly' ? primaryColor : Colors.grey,
-                      ),
-                      child: const Text('Weekly'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 300,
-              child: history.isEmpty
-                  ? const Center(child: Text('No history available'))
-                  : BarChart(
-                      BarChartData(
-                        alignment: BarChartAlignment.spaceAround,
-                        barGroups: _getBarGroups(history),
-                        titlesData: FlTitlesData(
-                          leftTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 40,
-                              getTitlesWidget: (value, meta) => Text(
-                                value.toInt().toString(),
-                                style: const TextStyle(color: Colors.white),
+                      child: history.isEmpty
+                          ? const Center(child: Text('No history available'))
+                          : BarChart(
+                              BarChartData(
+                                alignment: BarChartAlignment.spaceAround,
+                                barGroups: _getBarGroups(history),
+                                titlesData: FlTitlesData(
+                                  leftTitles: AxisTitles(
+                                    sideTitles: SideTitles(
+                                      showTitles: true,
+                                      reservedSize: 40,
+                                      getTitlesWidget: (value, meta) => Text(
+                                        value.toInt().toString(),
+                                        style: const TextStyle(color: Colors.white),
+                                      ),
+                                    ),
+                                  ),
+                                  bottomTitles: AxisTitles(
+                                    sideTitles: SideTitles(
+                                      showTitles: true,
+                                      reservedSize: 40,
+                                      getTitlesWidget: (value, meta) {
+                                        final labels = _getChartLabels(history);
+                                        final index = value.toInt();
+                                        return index < labels.length
+                                            ? Text(
+                                                labels[index],
+                                                style: const TextStyle(color: Colors.white),
+                                              )
+                                            : const Text('');
+                                      },
+                                    ),
+                                  ),
+                                ),
+                                borderData: FlBorderData(show: false),
+                                gridData: const FlGridData(show: false),
                               ),
                             ),
-                          ),
-                          bottomTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 40,
-                              getTitlesWidget: (value, meta) {
-                                final labels = _getChartLabels(history);
-                                final index = value.toInt();
-                                return index < labels.length
-                                    ? Text(
-                                        labels[index],
-                                        style: const TextStyle(color: Colors.white),
-                                      )
-                                    : const Text('');
-                              },
-                            ),
-                          ),
-                        ),
-                        borderData: FlBorderData(show: false),
-                        gridData: const FlGridData(show: false),
-                      ),
                     ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Close'),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(
-            'Close',
-            style: TextStyle(color: primaryColor),
-          ),
-        ),
-      ],
     );
   }
 
